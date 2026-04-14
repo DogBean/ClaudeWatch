@@ -1,0 +1,175 @@
+import React, { useState, useEffect } from 'react';
+import { Play, Loader2, BrainCircuit, CheckCircle2, GripHorizontal, Terminal, Activity } from 'lucide-react';
+
+// 模拟状态数据
+const INITIAL_TASKS = [
+  { id: '1', name: 'claude src/components', status: 'working', output: '正在重构 Navbar.tsx... [AST 解析中]' },
+  { id: '2', name: 'claude test', status: 'thinking', output: '分析测试覆盖率报告...' },
+  { id: '3', name: 'claude build', status: 'idle', output: '等待输入 >' },
+];
+
+export default function FloatingWindowDemo() {
+  const [tasks, setTasks] = useState(INITIAL_TASKS);
+  const [isHovered, setIsHovered] = useState(false);
+
+  // 注入自定义动画关键帧
+  useEffect(() => {
+    const style = document.createElement('style');
+    style.innerHTML = `
+      @keyframes scan {
+        0% { transform: translateX(-100%); }
+        100% { transform: translateX(200%); }
+      }
+      .animate-scan {
+        animation: scan 2s linear infinite;
+      }
+    `;
+    document.head.appendChild(style);
+    return () => document.head.removeChild(style);
+  }, []);
+
+  // 自动模拟状态切换 (仅用于演示)
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setTasks(currentTasks => 
+        currentTasks.map(task => {
+          if (Math.random() > 0.8) {
+            const states = ['idle', 'thinking', 'working'];
+            const randomState = states[Math.floor(Math.random() * states.length)];
+            return { ...task, status: randomState };
+          }
+          return task;
+        })
+      );
+    }, 2500);
+    return () => clearInterval(timer);
+  }, []);
+
+  // 状态视觉配置映射
+  const getStatusConfig = (status) => {
+    switch (status) {
+      case 'idle':
+        return {
+          icon: <Play className="w-4 h-4 text-emerald-400 drop-shadow-[0_0_8px_rgba(52,211,153,0.8)]" />,
+          border: 'border-l-emerald-500/80',
+          bg: 'bg-emerald-500/5 hover:bg-emerald-500/10',
+          text: 'text-emerald-400',
+        };
+      case 'thinking':
+        return {
+          icon: <BrainCircuit className="w-4 h-4 text-amber-400 animate-pulse drop-shadow-[0_0_8px_rgba(251,191,36,0.8)]" />,
+          border: 'border-l-amber-500/80',
+          bg: 'bg-amber-500/5 hover:bg-amber-500/10',
+          text: 'text-amber-400',
+        };
+      case 'working':
+        return {
+          icon: <Loader2 className="w-4 h-4 text-cyan-400 animate-spin drop-shadow-[0_0_8px_rgba(34,211,238,0.8)]" />,
+          border: 'border-l-cyan-500/80',
+          bg: 'bg-cyan-500/10 hover:bg-cyan-500/20',
+          text: 'text-cyan-400',
+        };
+      case 'complete':
+        return {
+          icon: <CheckCircle2 className="w-4 h-4 text-slate-500" />,
+          border: 'border-l-slate-600/50',
+          bg: 'bg-slate-800/30 hover:bg-slate-800/50',
+          text: 'text-slate-500',
+        };
+      default:
+        return {
+          icon: <Terminal className="w-4 h-4 text-slate-500" />,
+          border: 'border-l-transparent',
+          bg: 'bg-transparent',
+          text: 'text-slate-500',
+        };
+    }
+  };
+
+  return (
+    <div className="flex items-center justify-center min-h-screen bg-[#050505] relative overflow-hidden font-sans">
+      {/* 演示环境背景：暗色网格与微光 */}
+      <div className="absolute inset-0 bg-[linear-gradient(to_right,#8080800a_1px,transparent_1px),linear-gradient(to_bottom,#8080800a_1px,transparent_1px)] bg-[size:24px_24px]"></div>
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-cyan-500/10 rounded-full blur-[100px] pointer-events-none"></div>
+      
+      {/* 悬浮窗本体 */}
+      <div 
+        className={`relative w-[320px] bg-[#0a0c10]/80 backdrop-blur-2xl rounded-2xl border border-white/10 shadow-[0_0_40px_-10px_rgba(0,0,0,0.7)] overflow-hidden transition-all duration-500 ease-out z-10 ${
+          isHovered ? 'scale-100 opacity-100 shadow-[0_0_60px_-10px_rgba(34,211,238,0.15)]' : 'scale-[0.98] opacity-80'
+        }`}
+        onMouseEnter={() => setIsHovered(true)}
+        onMouseLeave={() => setIsHovered(false)}
+      >
+        {/* 顶部发光边缘 */}
+        <div className="absolute top-0 inset-x-0 h-[1px] bg-gradient-to-r from-transparent via-cyan-500/50 to-transparent"></div>
+
+        {/* 顶部拖拽栏 (模拟 Windows 拖拽区域) */}
+        <div className="h-7 bg-white/[0.02] flex items-center justify-center cursor-move group relative">
+          <GripHorizontal className="w-5 h-5 text-slate-600 group-hover:text-cyan-400/70 transition-colors duration-300" />
+        </div>
+
+        {/* 标题栏 */}
+        <div className="px-5 py-3 border-b border-white/[0.05] flex items-center justify-between bg-gradient-to-b from-white/[0.02] to-transparent">
+          <div className="flex items-center space-x-2.5">
+            <div className="relative">
+              <Activity className="w-4 h-4 text-cyan-400" />
+              <div className="absolute inset-0 bg-cyan-400 blur-[8px] opacity-50"></div>
+            </div>
+            <span className="text-xs font-bold text-slate-200 tracking-widest font-mono">CLAUDE_CLI</span>
+          </div>
+          <div className="flex space-x-1.5">
+            <div className="w-2.5 h-2.5 rounded-full bg-slate-700/50 border border-slate-600/50"></div>
+            <div className="w-2.5 h-2.5 rounded-full bg-slate-700/50 border border-slate-600/50"></div>
+          </div>
+        </div>
+
+        {/* 任务列表 */}
+        <div className="p-3 space-y-2.5 max-h-[450px] overflow-y-auto custom-scrollbar">
+          {tasks.map((task) => {
+            const config = getStatusConfig(task.status);
+            return (
+              <div 
+                key={task.id}
+                className={`relative group overflow-hidden p-3.5 rounded-xl border-y border-r border-y-white/[0.02] border-r-white/[0.02] border-l-[3px] ${config.border} ${config.bg} transition-all duration-300 flex flex-col gap-2`}
+              >
+                {/* 扫描光效 (仅在 Working 状态下显示) */}
+                {task.status === 'working' && (
+                  <div className="absolute inset-0 w-1/2 bg-gradient-to-r from-transparent via-white/5 to-transparent skew-x-12 animate-scan pointer-events-none"></div>
+                )}
+
+                <div className="flex items-center justify-between z-10">
+                  <span className="text-[13px] font-semibold text-slate-200 font-mono truncate pr-3 drop-shadow-md">
+                    $ {task.name}
+                  </span>
+                  <div className="shrink-0 bg-black/20 p-1.5 rounded-md border border-white/5">
+                    {config.icon}
+                  </div>
+                </div>
+                
+                <div className="text-[11px] font-mono flex items-center gap-2 z-10">
+                  <span className={`opacity-80 ${config.text}`}>❯</span> 
+                  <span className="text-slate-400 truncate tracking-tight">
+                    {task.status === 'thinking' ? (
+                      <span className="flex items-center gap-1">
+                        思考中<span className="animate-pulse">...</span>
+                      </span>
+                    ) : (
+                      task.output
+                    )}
+                  </span>
+                </div>
+              </div>
+            );
+          })}
+          
+          {tasks.length === 0 && (
+            <div className="py-8 flex flex-col items-center justify-center text-slate-500 gap-2">
+              <Terminal className="w-8 h-8 opacity-20" />
+              <span className="text-xs font-mono">SYSTEM IDLE</span>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}

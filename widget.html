@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Claude Widget</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html, body {
+    width: 100%;
+    background: transparent;
+    font-family: 'JetBrains Mono', 'Courier New', monospace;
+    user-select: none;
+    overflow: hidden;
+  }
+
+  /* ====== 卡片容器（圆角+毛玻璃） ====== */
+  .widget {
+    width: 320px;
+    margin: 8px;
+    background: rgba(10, 12, 16, 0.90);
+    backdrop-filter: blur(40px);
+    -webkit-backdrop-filter: blur(40px);
+    border-radius: 14px;
+    border: none;
+    box-shadow: none;
+    overflow: hidden;
+  }
+  .widget:hover {
+    box-shadow: none;
+  }
+  .widget.dragging {
+    box-shadow: none;
+  }
+
+  /* ====== 顶部发光边 ====== */
+  .top-glow {
+    height: 1px;
+    background: linear-gradient(to right, transparent, rgba(34,211,238,0.5), transparent);
+    transition: background 0.5s ease;
+  }
+
+  /* ====== 拖拽栏 ====== */
+  .drag-bar {
+    height: 22px;
+    background: rgba(255,255,255,0.02);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: grab;
+  }
+  .drag-bar:active { cursor: grabbing; }
+  .grip-icon {
+    color: #475569;
+    font-size: 14px;
+    transition: color 0.3s;
+  }
+  .drag-bar:hover .grip-icon { color: rgba(34,211,238,0.7); }
+
+  /* ====== 标题栏 ====== */
+  .title-bar {
+    padding: 8px 14px;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: linear-gradient(to bottom, rgba(255,255,255,0.02), transparent);
+  }
+  .title-left {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .activity-icon-wrap {
+    position: relative;
+    width: 14px;
+    height: 14px;
+  }
+  .activity-icon-wrap svg { position: relative; z-index: 1; }
+  .activity-glow {
+    position: absolute;
+    inset: -2px;
+    background: #22d3ee;
+    filter: blur(6px);
+    opacity: 0.4;
+    border-radius: 50%;
+  }
+  .title-text {
+    font-size: 11px;
+    font-weight: 600;
+    color: #e2e8f0;
+    letter-spacing: 3px;
+  }
+  .session-count {
+    font-size: 9px;
+    color: rgba(34,211,238,0.5);
+    margin-left: 4px;
+    letter-spacing: 0;
+  }
+
+  .title-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .action-btn {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    border: none;
+    cursor: pointer;
+    transition: all 0.2s;
+    padding: 0;
+  }
+  .btn-pin {
+    background: rgba(52,211,153,0.6);
+  }
+  .btn-pin:hover { background: rgba(52,211,153,0.9); }
+  .btn-pin.unpinned { background: rgba(100,116,139,0.4); }
+  .btn-close {
+    background: rgba(239,68,68,0.5);
+  }
+  .btn-close:hover { background: rgba(239,68,68,0.9); }
+
+  /* ====== 任务列表 ====== */
+  .task-list {
+    padding: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  /* ====== 任务卡片 ====== */
+  .task-card {
+    position: relative;
+    overflow: hidden;
+    padding: 10px 12px;
+    border-radius: 8px;
+    border-top: 1px solid rgba(255,255,255,0.02);
+    border-right: 1px solid rgba(255,255,255,0.02);
+    border-bottom: 1px solid rgba(255,255,255,0.02);
+    border-left: 3px solid;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    transition: background 0.3s;
+  }
+  .task-card.s-idle       { border-left-color: rgba(16,185,129,0.8); background: rgba(16,185,129,0.05); }
+  .task-card.s-idle:hover { background: rgba(16,185,129,0.1); }
+  .task-card.s-thinking       { border-left-color: rgba(245,158,11,0.8); background: rgba(245,158,11,0.05); }
+  .task-card.s-thinking:hover { background: rgba(245,158,11,0.1); }
+  .task-card.s-working       { border-left-color: rgba(6,182,212,0.8); background: rgba(6,182,212,0.1); }
+  .task-card.s-working:hover { background: rgba(6,182,212,0.15); }
+
+  .scan-line {
+    position: absolute;
+    top: 0; left: 0;
+    width: 50%; height: 100%;
+    background: linear-gradient(to right, transparent, rgba(255,255,255,0.05), transparent);
+    transform: skewX(12deg) translateX(-100%);
+    animation: scan 2s linear infinite;
+    pointer-events: none;
+  }
+  @keyframes scan {
+    0% { transform: skewX(12deg) translateX(-100%); }
+    100% { transform: skewX(12deg) translateX(300%); }
+  }
+
+  .task-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: relative;
+    z-index: 10;
+  }
+  .task-name {
+    font-size: 12px;
+    font-weight: 600;
+    color: #e2e8f0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    padding-right: 8px;
+  }
+  .task-icon-box {
+    flex-shrink: 0;
+    background: rgba(0,0,0,0.2);
+    padding: 4px;
+    border-radius: 5px;
+    border: 1px solid rgba(255,255,255,0.05);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .task-output {
+    font-size: 10px;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    position: relative;
+    z-index: 10;
+  }
+  .output-arrow { opacity: 0.8; font-weight: 600; }
+  .output-arrow.a-idle      { color: #34d399; }
+  .output-arrow.a-thinking  { color: #fbbf24; }
+  .output-arrow.a-working   { color: #22d3ee; }
+  .output-text {
+    color: #94a3b8;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .output-path {
+    font-size: 9px;
+    color: #475569;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .thinking-dots span {
+    animation: pdot 1.4s ease-in-out infinite;
+    display: inline;
+  }
+  .thinking-dots span:nth-child(2) { animation-delay: 0.2s; }
+  .thinking-dots span:nth-child(3) { animation-delay: 0.4s; }
+  @keyframes pdot { 0%,100% { opacity: 0.2; } 50% { opacity: 1; } }
+
+  /* Status icons */
+  .sicon { width: 13px; height: 13px; display: block; }
+  .sicon.i-idle     { color: #34d399; filter: drop-shadow(0 0 4px rgba(52,211,153,0.8)); }
+  .sicon.i-thinking { color: #fbbf24; animation: ipulse 2s ease-in-out infinite; filter: drop-shadow(0 0 4px rgba(251,191,36,0.8)); }
+  .sicon.i-working  { color: #22d3ee; animation: ispin 1s linear infinite; filter: drop-shadow(0 0 4px rgba(34,211,238,0.8)); }
+  @keyframes ipulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+  @keyframes ispin  { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+
+  /* Empty state */
+  .empty-state {
+    padding: 28px 16px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+  }
+  .empty-state svg { color: #475569; opacity: 0.3; }
+  .empty-state span { font-size: 11px; color: #475569; letter-spacing: 1px; }
+  .empty-state .sub { font-size: 9px; color: #334155; }
+</style>
+</head>
+<body>
+
+<div class="widget" id="widget">
+  <div class="top-glow" id="top-glow"></div>
+
+  <div class="drag-bar" id="drag-bar">
+    <span class="grip-icon">⋯</span>
+  </div>
+
+  <div class="title-bar">
+    <div class="title-left">
+      <div class="activity-icon-wrap">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#22d3ee" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+        </svg>
+        <div class="activity-glow"></div>
+      </div>
+      <span class="title-text">WATCH<span class="session-count" id="session-count"></span></span>
+    </div>
+    <div class="title-actions">
+      <button class="action-btn btn-pin" id="btn-pin" title="置顶"></button>
+      <button class="action-btn btn-close" id="btn-close" title="关闭"></button>
+    </div>
+  </div>
+
+  <div class="task-list" id="task-list">
+    <div class="empty-state">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/>
+      </svg>
+      <span>SCANNING...</span>
+      <span class="sub">Waiting for sessions</span>
+    </div>
+  </div>
+</div>
+
+<script>
+(function() {
+  'use strict';
+
+  var taskList = document.getElementById('task-list');
+  var topGlow  = document.getElementById('top-glow');
+  var countEl  = document.getElementById('session-count');
+  var widget   = document.getElementById('widget');
+
+  var ICONS = {
+    idle:     '<svg class="sicon i-idle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>',
+    thinking: '<svg class="sicon i-thinking" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a8 8 0 0 1 8 8c0 3.4-2.1 6.3-5 7.5V20a1 1 0 0 1-1 1h-4a1 1 0 0 1-1-1v-2.5C6.1 16.3 4 13.4 4 10a8 8 0 0 1 8-8z"/></svg>',
+    working:  '<svg class="sicon i-working" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>'
+  };
+
+  window.updateTasks = function(tasks) {
+    countEl.textContent = tasks.length > 0 ? ' ' + tasks.length : '';
+
+    var dominant = 'idle';
+    if (tasks.some(function(t){ return t.status === 'working'; })) dominant = 'working';
+    else if (tasks.some(function(t){ return t.status === 'thinking'; })) dominant = 'thinking';
+    updateGlow(dominant);
+
+    taskList.innerHTML = '';
+
+    if (tasks.length === 0) {
+      taskList.innerHTML =
+        '<div class="empty-state">' +
+          '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>' +
+          '<span>NO ACTIVE SESSIONS</span>' +
+          '<span class="sub">Start claude to see live status</span>' +
+        '</div>';
+      fitWindow();
+      return;
+    }
+
+    tasks.forEach(function(t) {
+      var scan = t.status === 'working' ? '<div class="scan-line"></div>' : '';
+      var outputHTML = t.status === 'thinking'
+        ? '<span class="thinking-dots">思考中<span>.</span><span>.</span><span>.</span></span>'
+        : escapeHtml(t.output);
+      var pathShort = t.path ? t.path.split('/').slice(-2).join('/') : '';
+
+      var card = document.createElement('div');
+      card.className = 'task-card s-' + t.status;
+      card.innerHTML =
+        scan +
+        '<div class="task-header">' +
+          '<span class="task-name" title="' + escapeAttr(t.path || t.name) + '">' + escapeHtml(t.name) + '</span>' +
+          '<div class="task-icon-box">' + (ICONS[t.status] || ICONS.idle) + '</div>' +
+        '</div>' +
+        '<div class="task-output">' +
+          '<span class="output-arrow a-' + t.status + '">❯</span>' +
+          '<span class="output-text">' + outputHTML + '</span>' +
+        '</div>' +
+        (pathShort ? '<div class="output-path">' + escapeHtml(pathShort) + '</div>' : '');
+
+      taskList.appendChild(card);
+    });
+
+    fitWindow();
+  };
+
+  function fitWindow() {
+    requestAnimationFrame(function() {
+      var rect = widget.getBoundingClientRect();
+      // 8px margin on each side, +2 for rounding safety
+      var w = Math.ceil(rect.width) + 18;
+      var h = Math.ceil(rect.height) + 18;
+      if (window.pywebview && pywebview.api) {
+        pywebview.api.resize(w, h);
+      }
+    });
+  }
+
+  function updateGlow(state) {
+    var g = {
+      idle:     'linear-gradient(to right, transparent, rgba(34,211,238,0.5), transparent)',
+      thinking: 'linear-gradient(to right, transparent, rgba(251,191,36,0.5), transparent)',
+      working:  'linear-gradient(to right, transparent, rgba(34,211,238,0.6), transparent)'
+    };
+    topGlow.style.background = g[state] || g.idle;
+  }
+
+  function escapeHtml(s) {
+    var d = document.createElement('div');
+    d.textContent = s || '';
+    return d.innerHTML;
+  }
+  function escapeAttr(s) {
+    return (s || '').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;').replace(/</g,'&lt;');
+  }
+
+  /* ====== Drag ====== */
+  var isDragging = false, dragStartX, dragStartY;
+
+  document.getElementById('drag-bar').addEventListener('mousedown', function(e) {
+    isDragging = true;
+    dragStartX = e.screenX;
+    dragStartY = e.screenY;
+    widget.classList.add('dragging');
+    e.preventDefault();
+  });
+
+  document.addEventListener('mousemove', function(e) {
+    if (!isDragging) return;
+    var dx = e.screenX - dragStartX;
+    var dy = e.screenY - dragStartY;
+    if (window.pywebview && pywebview.api) {
+      pywebview.api.move_window(dx, dy);
+    }
+  });
+
+  document.addEventListener('mouseup', function() {
+    if (isDragging) {
+      isDragging = false;
+      widget.classList.remove('dragging');
+      if (window.pywebview && pywebview.api) pywebview.api.end_drag();
+    }
+  });
+
+  /* ====== Controls ====== */
+  document.getElementById('btn-close').addEventListener('click', function() {
+    if (window.pywebview && pywebview.api) pywebview.api.close_window();
+  });
+  document.getElementById('btn-pin').addEventListener('click', function() {
+    this.classList.toggle('unpinned');
+    if (window.pywebview && pywebview.api) pywebview.api.toggle_pin();
+  });
+
+})();
+</script>
+</body>
+</html>

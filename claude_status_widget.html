@@ -1,0 +1,957 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Claude Code Status Widget</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;700&family=JetBrains+Mono:wght@400;600&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html, body {
+    width: 100vw;
+    height: 100vh;
+    overflow: hidden;
+    background: #050505;
+    font-family: 'Noto Sans JP', sans-serif;
+    user-select: none;
+  }
+
+  /* ====== 背景网格 ====== */
+  .bg-grid {
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(to right, rgba(128,128,128,0.04) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(128,128,128,0.04) 1px, transparent 1px);
+    background-size: 24px 24px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* ====== 背景微光 ====== */
+  .bg-glow {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 384px;
+    height: 384px;
+    background: radial-gradient(circle, rgba(34,211,238,0.1), transparent 70%);
+    border-radius: 50%;
+    filter: blur(80px);
+    pointer-events: none;
+    z-index: 0;
+    transition: background 0.8s ease;
+  }
+
+  /* ====== 悬浮窗 ====== */
+  .floating-window {
+    position: fixed;
+    width: 320px;
+    background: rgba(10, 12, 16, 0.8);
+    backdrop-filter: blur(40px);
+    -webkit-backdrop-filter: blur(40px);
+    border-radius: 16px;
+    border: 1px solid rgba(255,255,255,0.1);
+    box-shadow: 0 0 40px -10px rgba(0,0,0,0.7);
+    overflow: hidden;
+    transition: box-shadow 0.5s ease, opacity 0.5s ease, transform 0.3s ease;
+    z-index: 10;
+    cursor: default;
+  }
+
+  .floating-window:hover {
+    box-shadow: 0 0 60px -10px rgba(34,211,238,0.15);
+  }
+
+  .floating-window.dragging {
+    opacity: 0.95;
+    transform: scale(1.02);
+    box-shadow: 0 0 80px -10px rgba(34,211,238,0.25);
+  }
+
+  /* ====== 顶部发光边缘 ====== */
+  .top-glow {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: linear-gradient(to right, transparent, rgba(34,211,238,0.5), transparent);
+    z-index: 5;
+    transition: background 0.5s ease;
+  }
+
+  /* ====== 拖拽栏 ====== */
+  .drag-bar {
+    height: 28px;
+    background: rgba(255,255,255,0.02);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: grab;
+    -webkit-app-region: drag;
+  }
+
+  .drag-bar:active { cursor: grabbing; }
+
+  .grip-icon {
+    color: #475569;
+    font-size: 18px;
+    line-height: 1;
+    transition: color 0.3s ease;
+    letter-spacing: 2px;
+  }
+
+  .drag-bar:hover .grip-icon { color: rgba(34,211,238,0.7); }
+
+  /* ====== 标题栏 ====== */
+  .title-bar {
+    padding: 12px 20px;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: linear-gradient(to bottom, rgba(255,255,255,0.02), transparent);
+  }
+
+  .title-left {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .activity-icon-wrap {
+    position: relative;
+    width: 16px;
+    height: 16px;
+  }
+
+  .activity-icon-wrap svg {
+    position: relative;
+    z-index: 1;
+  }
+
+  .activity-glow {
+    position: absolute;
+    inset: 0;
+    background: #22d3ee;
+    filter: blur(8px);
+    opacity: 0.5;
+    border-radius: 50%;
+  }
+
+  .title-text {
+    font-size: 12px;
+    font-weight: 700;
+    color: #e2e8f0;
+    letter-spacing: 3px;
+    font-family: 'JetBrains Mono', 'Courier New', monospace;
+  }
+
+  .window-dots {
+    display: flex;
+    gap: 6px;
+  }
+
+  .window-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: rgba(51,65,85,0.5);
+    border: 1px solid rgba(71,85,105,0.5);
+  }
+
+  /* ====== 任务列表 ====== */
+  .task-list {
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    max-height: 500px;
+    overflow-y: auto;
+  }
+
+  .task-list::-webkit-scrollbar { width: 4px; }
+  .task-list::-webkit-scrollbar-track { background: transparent; }
+  .task-list::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 2px; }
+
+  /* ====== 任务卡片 ====== */
+  .task-card {
+    position: relative;
+    overflow: hidden;
+    padding: 14px;
+    border-radius: 12px;
+    border-top: 1px solid rgba(255,255,255,0.02);
+    border-right: 1px solid rgba(255,255,255,0.02);
+    border-bottom: 1px solid rgba(255,255,255,0.02);
+    border-left: 3px solid;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    transition: all 0.3s ease;
+    -webkit-app-region: no-drag;
+  }
+
+  /* 状态样式 */
+  .task-card.status-idle {
+    border-left-color: rgba(16,185,129,0.8);
+    background: rgba(16,185,129,0.05);
+  }
+  .task-card.status-idle:hover { background: rgba(16,185,129,0.1); }
+
+  .task-card.status-thinking {
+    border-left-color: rgba(245,158,11,0.8);
+    background: rgba(245,158,11,0.05);
+  }
+  .task-card.status-thinking:hover { background: rgba(245,158,11,0.1); }
+
+  .task-card.status-working {
+    border-left-color: rgba(6,182,212,0.8);
+    background: rgba(6,182,212,0.1);
+  }
+  .task-card.status-working:hover { background: rgba(6,182,212,0.2); }
+
+  .task-card.status-done {
+    border-left-color: rgba(100,116,139,0.5);
+    background: rgba(30,41,59,0.3);
+  }
+  .task-card.status-done:hover { background: rgba(30,41,59,0.5); }
+
+  /* ====== 扫描光效 ====== */
+  .scan-line {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 50%;
+    height: 100%;
+    background: linear-gradient(to right, transparent, rgba(255,255,255,0.05), transparent);
+    transform: skewX(12deg) translateX(-100%);
+    animation: scan 2s linear infinite;
+    pointer-events: none;
+  }
+
+  @keyframes scan {
+    0% { transform: skewX(12deg) translateX(-100%); }
+    100% { transform: skewX(12deg) translateX(300%); }
+  }
+
+  /* ====== 任务头部 ====== */
+  .task-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: relative;
+    z-index: 10;
+  }
+
+  .task-name {
+    font-size: 13px;
+    font-weight: 600;
+    color: #e2e8f0;
+    font-family: 'JetBrains Mono', 'Courier New', monospace;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    padding-right: 12px;
+    text-shadow: 0 0 10px rgba(0,0,0,0.5);
+  }
+
+  .task-icon-box {
+    flex-shrink: 0;
+    background: rgba(0,0,0,0.2);
+    padding: 6px;
+    border-radius: 6px;
+    border: 1px solid rgba(255,255,255,0.05);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* ====== 任务输出 ====== */
+  .task-output {
+    font-size: 11px;
+    font-family: 'JetBrains Mono', 'Courier New', monospace;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    position: relative;
+    z-index: 10;
+  }
+
+  .output-arrow {
+    opacity: 0.8;
+    font-weight: 600;
+  }
+  .output-arrow.idle { color: #34d399; }
+  .output-arrow.thinking { color: #fbbf24; }
+  .output-arrow.working { color: #22d3ee; }
+  .output-arrow.done { color: #64748b; }
+
+  .output-text {
+    color: #94a3b8;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    letter-spacing: -0.3px;
+  }
+
+  /* 思考动画 */
+  .thinking-dots {
+    display: inline-flex;
+    align-items: center;
+  }
+
+  .thinking-dots span {
+    animation: pulse-dot 1.4s ease-in-out infinite;
+  }
+  .thinking-dots span:nth-child(2) { animation-delay: 0.2s; }
+  .thinking-dots span:nth-child(3) { animation-delay: 0.4s; }
+
+  @keyframes pulse-dot {
+    0%, 100% { opacity: 0.2; }
+    50% { opacity: 1; }
+  }
+
+  /* ====== 状态 SVG 图标 ====== */
+  .status-icon {
+    width: 16px;
+    height: 16px;
+    display: block;
+  }
+
+  .status-icon.icon-idle {
+    color: #34d399;
+    filter: drop-shadow(0 0 6px rgba(52,211,153,0.8));
+  }
+
+  .status-icon.icon-thinking {
+    color: #fbbf24;
+    animation: icon-pulse 2s ease-in-out infinite;
+    filter: drop-shadow(0 0 6px rgba(251,191,36,0.8));
+  }
+
+  .status-icon.icon-working {
+    color: #22d3ee;
+    animation: icon-spin 1s linear infinite;
+    filter: drop-shadow(0 0 6px rgba(34,211,238,0.8));
+  }
+
+  .status-icon.icon-done {
+    color: #64748b;
+  }
+
+  @keyframes icon-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+
+  @keyframes icon-spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+  }
+
+  /* ====== 空状态 ====== */
+  .empty-state {
+    padding: 32px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    color: #64748b;
+    gap: 8px;
+  }
+
+  .empty-state svg { opacity: 0.2; width: 32px; height: 32px; }
+  .empty-state span {
+    font-size: 12px;
+    font-family: 'JetBrains Mono', 'Courier New', monospace;
+    letter-spacing: 2px;
+  }
+
+  /* ====== 底部控制面板 ====== */
+  .control-panel {
+    border-top: 1px solid rgba(255,255,255,0.05);
+    background: rgba(255,255,255,0.01);
+  }
+
+  .panel-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 28px;
+    background: transparent;
+    border: none;
+    color: rgba(34,211,238,0.5);
+    font-size: 11px;
+    font-family: 'JetBrains Mono', 'Courier New', monospace;
+    cursor: pointer;
+    letter-spacing: 1px;
+    -webkit-app-region: no-drag;
+    transition: color 0.3s ease;
+  }
+
+  .panel-toggle:hover { color: #22d3ee; }
+
+  .panel-toggle .arrow {
+    display: inline-block;
+    transition: transform 0.3s ease;
+    margin-left: 6px;
+    font-size: 10px;
+  }
+
+  .control-panel.collapsed .panel-toggle .arrow {
+    transform: rotate(180deg);
+  }
+
+  .control-panel.collapsed .panel-body { display: none; }
+
+  .panel-body {
+    padding: 8px 16px 14px;
+  }
+
+  .btn-group {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 10px;
+  }
+
+  .btn-group button {
+    flex: 1;
+    padding: 6px 0;
+    background: rgba(34,211,238,0.06);
+    border: 1px solid rgba(34,211,238,0.15);
+    border-radius: 8px;
+    color: rgba(34,211,238,0.5);
+    font-size: 11px;
+    font-family: 'JetBrains Mono', 'Courier New', monospace;
+    cursor: pointer;
+    transition: all 0.25s ease;
+    -webkit-app-region: no-drag;
+    letter-spacing: 1px;
+  }
+
+  .btn-group button:hover {
+    background: rgba(34,211,238,0.12);
+    color: rgba(34,211,238,0.85);
+  }
+
+  .btn-group button.active {
+    background: rgba(34,211,238,0.15);
+    border-color: #22d3ee;
+    color: #22d3ee;
+    box-shadow: 0 0 10px rgba(34,211,238,0.2), inset 0 0 8px rgba(34,211,238,0.08);
+  }
+
+  .slider-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .slider-row span {
+    color: rgba(34,211,238,0.45);
+    font-size: 10px;
+    white-space: nowrap;
+    letter-spacing: 1px;
+    font-family: 'JetBrains Mono', 'Courier New', monospace;
+  }
+
+  input[type="range"] {
+    flex: 1;
+    -webkit-appearance: none;
+    appearance: none;
+    height: 3px;
+    background: rgba(34,211,238,0.12);
+    border-radius: 2px;
+    outline: none;
+    -webkit-app-region: no-drag;
+  }
+
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: #22d3ee;
+    box-shadow: 0 0 8px rgba(34,211,238,0.5);
+    cursor: pointer;
+  }
+
+  /* ====== 背景微粒 ====== */
+  .bg-particle {
+    position: fixed;
+    width: 2px;
+    height: 2px;
+    border-radius: 50%;
+    background: rgba(34,211,238,0.3);
+    pointer-events: none;
+    z-index: 1;
+  }
+
+  /* ====== 完成闪烁效果 ====== */
+  @keyframes complete-flash {
+    0% { background: rgba(16,185,129,0.05); }
+    50% { background: rgba(16,185,129,0.15); }
+    100% { background: rgba(16,185,129,0.05); }
+  }
+
+  .task-card.flash-done {
+    animation: complete-flash 0.6s ease-in-out 3;
+  }
+</style>
+</head>
+<body>
+
+<!-- 背景 -->
+<div class="bg-grid"></div>
+<div class="bg-glow" id="bg-glow"></div>
+
+<!-- 悬浮窗 -->
+<div class="floating-window" id="window">
+  <!-- 顶部发光边缘 -->
+  <div class="top-glow" id="top-glow"></div>
+
+  <!-- 拖拽栏 -->
+  <div class="drag-bar" id="drag-bar">
+    <span class="grip-icon">⋯</span>
+  </div>
+
+  <!-- 标题栏 -->
+  <div class="title-bar">
+    <div class="title-left">
+      <div class="activity-icon-wrap">
+        <svg class="status-icon icon-idle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+        </svg>
+        <div class="activity-glow"></div>
+      </div>
+      <span class="title-text">CLAUDE_CLI</span>
+    </div>
+    <div class="window-dots">
+      <div class="window-dot"></div>
+      <div class="window-dot"></div>
+    </div>
+  </div>
+
+  <!-- 任务列表 -->
+  <div class="task-list" id="task-list">
+    <!-- 任务卡片由 JS 动态生成 -->
+  </div>
+
+  <!-- 底部控制面板 -->
+  <div class="control-panel" id="control-panel">
+    <button class="panel-toggle" id="panel-toggle">
+      <span>STATUS PANEL</span>
+      <span class="arrow">▼</span>
+    </button>
+    <div class="panel-body">
+      <div class="btn-group">
+        <button class="active" data-state="idle">待機</button>
+        <button data-state="thinking">思考</button>
+        <button data-state="working">工作</button>
+        <button data-state="done">完了</button>
+      </div>
+      <div class="slider-row">
+        <span>強度</span>
+        <input type="range" id="intensity" min="1" max="10" value="5">
+        <span id="intensity-val">5</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- CDN -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/animejs/3.2.2/anime.min.js"></script>
+
+<script>
+(function() {
+  'use strict';
+
+  // ====== 配置 ======
+  const TASKS = [
+    { id: '1', name: 'claude src/components', status: 'idle', output: '等待输入 >' },
+    { id: '2', name: 'claude test', status: 'idle', output: '等待输入 >' },
+    { id: '3', name: 'claude build', status: 'idle', output: '等待输入 >' },
+  ];
+
+  const STATE_LABELS = {
+    idle: '待機',
+    thinking: '思考',
+    working: '工作',
+    done: '完了'
+  };
+
+  const STATE_OUTPUTS = {
+    idle: '等待输入 >',
+    thinking: '分析中...',
+    working: '正在处理...',
+    done: '処理完了 ✓'
+  };
+
+  let currentGlobalState = 'idle';
+  let intensity = 5;
+  let activeAnimations = [];
+
+  // ====== DOM 引用 ======
+  const win = document.getElementById('window');
+  const taskListEl = document.getElementById('task-list');
+  const bgGlow = document.getElementById('bg-glow');
+  const topGlow = document.getElementById('top-glow');
+  const controlPanel = document.getElementById('control-panel');
+  const panelToggle = document.getElementById('panel-toggle');
+  const intensitySlider = document.getElementById('intensity');
+  const intensityVal = document.getElementById('intensity-val');
+  const buttons = document.querySelectorAll('.btn-group button');
+
+  // ====== SVG 图标 ======
+  function getIconSVG(status) {
+    switch (status) {
+      case 'idle':
+        return '<svg class="status-icon icon-idle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>';
+      case 'thinking':
+        return '<svg class="status-icon icon-thinking" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a8 8 0 0 1 8 8c0 3.4-2.1 6.3-5 7.5V20a1 1 0 0 1-1 1h-4a1 1 0 0 1-1-1v-2.5C6.1 16.3 4 13.4 4 10a8 8 0 0 1 8-8z"/><line x1="10" y1="22" x2="14" y2="22"/><circle cx="9" cy="10" r="1" fill="currentColor"/><circle cx="12" cy="8" r="1" fill="currentColor"/><circle cx="15" cy="10" r="1" fill="currentColor"/></svg>';
+      case 'working':
+        return '<svg class="status-icon icon-working" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>';
+      case 'done':
+        return '<svg class="status-icon icon-done" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>';
+      default:
+        return '<svg class="status-icon icon-idle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>';
+    }
+  }
+
+  // ====== 渲染任务卡片 ======
+  function renderTasks() {
+    taskListEl.innerHTML = '';
+    TASKS.forEach(task => {
+      const card = document.createElement('div');
+      card.className = 'task-card status-' + task.status;
+      card.id = 'task-' + task.id;
+
+      // 扫描光效（仅 working 状态）
+      const scanHTML = task.status === 'working' ? '<div class="scan-line"></div>' : '';
+
+      // 输出文本
+      let outputHTML;
+      if (task.status === 'thinking') {
+        outputHTML = '<span class="output-text"><span class="thinking-dots">思考中<span>.</span><span>.</span><span>.</span></span></span>';
+      } else {
+        outputHTML = '<span class="output-text">' + task.output + '</span>';
+      }
+
+      card.innerHTML = scanHTML +
+        '<div class="task-header">' +
+          '<span class="task-name">$ ' + task.name + '</span>' +
+          '<div class="task-icon-box">' + getIconSVG(task.status) + '</div>' +
+        '</div>' +
+        '<div class="task-output">' +
+          '<span class="output-arrow ' + task.status + '">❯</span>' +
+          outputHTML +
+        '</div>';
+
+      taskListEl.appendChild(card);
+    });
+  }
+
+  // ====== 更新单个任务状态 ======
+  function updateTask(taskId, newStatus, output) {
+    const task = TASKS.find(t => t.id === taskId);
+    if (!task) return;
+    task.status = newStatus;
+    if (output !== undefined) task.output = output;
+    renderTasks();
+  }
+
+  // ====== 更新全部任务状态 ======
+  function updateAllTasks(status) {
+    TASKS.forEach(t => {
+      t.status = status;
+      t.output = STATE_OUTPUTS[status];
+    });
+    renderTasks();
+  }
+
+  // ====== 背景微光颜色切换 ======
+  function updateGlowColor(state) {
+    const colors = {
+      idle: 'rgba(34,211,238,0.1)',
+      thinking: 'rgba(251,191,36,0.1)',
+      working: 'rgba(34,211,238,0.15)',
+      done: 'rgba(52,211,153,0.1)'
+    };
+    const glowColors = {
+      idle: 'linear-gradient(to right, transparent, rgba(34,211,238,0.5), transparent)',
+      thinking: 'linear-gradient(to right, transparent, rgba(251,191,36,0.5), transparent)',
+      working: 'linear-gradient(to right, transparent, rgba(34,211,238,0.6), transparent)',
+      done: 'linear-gradient(to right, transparent, rgba(52,211,153,0.5), transparent)'
+    };
+    bgGlow.style.background = 'radial-gradient(circle, ' + colors[state] + ', transparent 70%)';
+    topGlow.style.background = glowColors[state];
+  }
+
+  // ====== 清除动画 ======
+  function clearAnimations() {
+    activeAnimations.forEach(a => a.pause());
+    activeAnimations = [];
+  }
+
+  // ====== 设置状态动画 ======
+  function setWorkingAnimation() {
+    // 为 working 状态的卡片添加闪烁效果
+    TASKS.forEach((task, i) => {
+      if (task.status === 'working') {
+        const card = document.getElementById('task-' + task.id);
+        if (card) {
+          const a = anime({
+            targets: card,
+            opacity: [0.85, 1],
+            duration: Math.max(300, 800 - intensity * 50),
+            delay: i * 100,
+            easing: 'easeInOutSine',
+            loop: true,
+            direction: 'alternate'
+          });
+          activeAnimations.push(a);
+        }
+      }
+    });
+  }
+
+  function setDoneAnimation() {
+    // 完成闪烁效果
+    TASKS.forEach((task, i) => {
+      const card = document.getElementById('task-' + task.id);
+      if (card) {
+        card.classList.add('flash-done');
+        const a = anime({
+          targets: card.querySelector('.task-icon-box'),
+          scale: [1, 1.3, 1],
+          duration: 500,
+          delay: i * 150,
+          easing: 'easeOutElastic(1, .5)'
+        });
+        activeAnimations.push(a);
+      }
+    });
+
+    // 2秒后回到 idle
+    setTimeout(function() {
+      if (currentGlobalState === 'done') {
+        setState('idle');
+      }
+    }, 2500);
+  }
+
+  // ====== 状态切换 ======
+  function setState(state) {
+    clearAnimations();
+    currentGlobalState = state;
+
+    // 更新按钮
+    buttons.forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.state === state);
+    });
+
+    // 更新背景
+    updateGlowColor(state);
+
+    // 更新所有任务
+    updateAllTasks(state);
+
+    // 状态动画
+    if (state === 'working') {
+      setWorkingAnimation();
+    } else if (state === 'done') {
+      setDoneAnimation();
+    }
+  }
+
+  // ====== 拖拽（Matter.js 物理引擎） ======
+  const { Engine, World, Bodies, Body, Constraint, Runner: MRunner, Events } = Matter;
+
+  const engine = Engine.create({ gravity: { x: 0, y: 0 } });
+  const world = engine.world;
+
+  const W = window.innerWidth;
+  const H = window.innerHeight;
+  const startX = W / 2 - 160;
+  const startY = H / 2 - 200;
+
+  // 窗口物理体
+  const winBody = Bodies.rectangle(startX + 160, startY + 200, 320, 400, {
+    frictionAir: 0.04,
+    restitution: 0.5,
+    density: 0.001,
+    friction: 0
+  });
+  World.add(world, winBody);
+
+  // 居中弹簧
+  const spring = Constraint.create({
+    pointA: { x: W / 2, y: H / 2 },
+    bodyB: winBody,
+    stiffness: 0.006,
+    damping: 0.02,
+    length: 0
+  });
+  World.add(world, spring);
+
+  // 边界
+  const wallOpts = { isStatic: true, restitution: 0.4, render: { visible: false } };
+  World.add(world, [
+    Bodies.rectangle(W / 2, -300, W + 600, 600, wallOpts),
+    Bodies.rectangle(W / 2, H + 300, W + 600, 600, wallOpts),
+    Bodies.rectangle(-300, H / 2, 600, H + 600, wallOpts),
+    Bodies.rectangle(W + 300, H / 2, 600, H + 600, wallOpts)
+  ]);
+
+  const mRunner = MRunner.create();
+  MRunner.run(mRunner, engine);
+
+  // 随机微力
+  Events.on(engine, 'beforeUpdate', function() {
+    if (Math.random() < 0.02) {
+      Body.applyForce(winBody, winBody.position, {
+        x: (Math.random() - 0.5) * 0.0001,
+        y: (Math.random() - 0.5) * 0.0001
+      });
+    }
+  });
+
+  // 同步 DOM
+  function syncDOM() {
+    const pos = winBody.position;
+    win.style.left = (pos.x - 160) + 'px';
+    win.style.top = (pos.y - 200) + 'px';
+    requestAnimationFrame(syncDOM);
+  }
+  syncDOM();
+
+  // 拖拽交互
+  let isDragging = false;
+  let dragOffset = { x: 0, y: 0 };
+
+  document.getElementById('drag-bar').addEventListener('mousedown', function(e) {
+    isDragging = true;
+    const pos = winBody.position;
+    dragOffset.x = e.clientX - pos.x;
+    dragOffset.y = e.clientY - pos.y;
+    Body.setVelocity(winBody, { x: 0, y: 0 });
+    win.classList.add('dragging');
+    e.preventDefault();
+  });
+
+  window.addEventListener('mousemove', function(e) {
+    if (!isDragging) return;
+    const targetX = e.clientX - dragOffset.x;
+    const targetY = e.clientY - dragOffset.y;
+    Body.setPosition(winBody, { x: targetX, y: targetY });
+    Body.setVelocity(winBody, { x: 0, y: 0 });
+  });
+
+  window.addEventListener('mouseup', function() {
+    if (isDragging) {
+      isDragging = false;
+      win.classList.remove('dragging');
+    }
+  });
+
+  // ====== 背景微粒 ======
+  function createBgParticles() {
+    for (let i = 0; i < 15; i++) {
+      const p = document.createElement('div');
+      p.className = 'bg-particle';
+      p.style.left = Math.random() * 100 + 'vw';
+      p.style.top = Math.random() * 100 + 'vh';
+      p.style.opacity = 0.1 + Math.random() * 0.2;
+      const size = 1 + Math.random() * 2;
+      p.style.width = size + 'px';
+      p.style.height = size + 'px';
+      document.body.appendChild(p);
+      anime({
+        targets: p,
+        translateX: () => anime.random(-30, 30),
+        translateY: () => anime.random(-30, 30),
+        opacity: [
+          { value: 0.05, duration: anime.random(2500, 4000) },
+          { value: 0.25, duration: anime.random(2500, 4000) }
+        ],
+        easing: 'easeInOutSine',
+        loop: true,
+        direction: 'alternate'
+      });
+    }
+  }
+  createBgParticles();
+
+  // ====== 控制面板事件 ======
+  buttons.forEach(btn => {
+    btn.addEventListener('click', function() {
+      setState(this.dataset.state);
+    });
+  });
+
+  panelToggle.addEventListener('click', function() {
+    controlPanel.classList.toggle('collapsed');
+  });
+
+  intensitySlider.addEventListener('input', function() {
+    intensity = parseInt(this.value);
+    intensityVal.textContent = intensity;
+    if (currentGlobalState === 'thinking' || currentGlobalState === 'working') {
+      setState(currentGlobalState);
+    }
+  });
+
+  // ====== 窗口缩放 ======
+  window.addEventListener('resize', function() {
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+    spring.pointA = { x: w / 2, y: h / 2 };
+  });
+
+  // ====== 初始化 ======
+  setState('idle');
+
+  // 模拟自动状态切换演示
+  let demoTimer = null;
+  function startDemo() {
+    const states = ['thinking', 'working', 'working', 'done'];
+    let idx = 0;
+    demoTimer = setInterval(function() {
+      if (idx < states.length) {
+        // 随机设置不同任务状态，模拟真实场景
+        if (idx === 0) {
+          updateTask('1', 'thinking', '解析 AST 结构...');
+          updateTask('2', 'thinking', '分析测试覆盖率...');
+          updateTask('3', 'idle', '等待输入 >');
+        } else if (idx === 1) {
+          updateTask('1', 'working', '正在重构 Navbar.tsx...');
+          updateTask('2', 'thinking', '思考中');
+          updateTask('3', 'idle', '等待输入 >');
+        } else if (idx === 2) {
+          updateTask('1', 'done', '処理完了 ✓');
+          updateTask('2', 'working', '生成单元测试...');
+          updateTask('3', 'thinking', '思考中');
+        } else if (idx === 3) {
+          updateTask('1', 'done', '処理完了 ✓');
+          updateTask('2', 'done', '処理完了 ✓');
+          updateTask('3', 'done', '処理完了 ✓');
+          updateGlowColor('done');
+          setTimeout(function() { setState('idle'); idx = -1; }, 2000);
+        }
+        idx++;
+      }
+    }, 2500);
+  }
+
+  startDemo();
+
+})();
+</script>
+</body>
+</html>
