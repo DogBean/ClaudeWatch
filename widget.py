@@ -13,6 +13,7 @@ import time
 import threading
 import ctypes
 from collections import deque
+import winreg
 
 
 class WidgetAPI:
@@ -64,9 +65,46 @@ class WidgetAPI:
         if self._window:
             self._window.destroy()
 
+    def set_opacity(self, percent):
+        """Set window opacity via Win32 layered window API"""
+        if not self._hwnd:
+            return
+        try:
+            GWL_EXSTYLE = -20
+            WS_EX_LAYERED = 0x80000
+            LWA_ALPHA = 0x02
+            ex_style = ctypes.windll.user32.GetWindowLongW(self._hwnd, GWL_EXSTYLE)
+            ctypes.windll.user32.SetWindowLongW(self._hwnd, GWL_EXSTYLE,
+                                                 ex_style | WS_EX_LAYERED)
+            alpha = int(max(10, min(255, percent * 255 / 100)))
+            ctypes.windll.user32.SetLayeredWindowAttributes(
+                self._hwnd, 0, alpha, LWA_ALPHA)
+        except Exception:
+            pass
+
     def toggle_pin(self):
         if self._window:
             self._window.on_top = not getattr(self._window, '_on_top', True)
+
+    def set_autostart(self, enabled):
+        """Add or remove startup registry entry"""
+        key_path = r'Software\Microsoft\Windows\CurrentVersion\Run'
+        app_name = 'ClaudeWatch'
+        try:
+            key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path, 0,
+                                 winreg.KEY_SET_VALUE)
+            if enabled:
+                exe_path = os.path.abspath(sys.argv[0])
+                winreg.SetValueEx(key, app_name, 0, winreg.REG_SZ,
+                                  f'"{sys.executable}" "{exe_path}"')
+            else:
+                try:
+                    winreg.DeleteValue(key, app_name)
+                except FileNotFoundError:
+                    pass
+            winreg.CloseKey(key)
+        except Exception:
+            pass
             self._window._on_top = self._window.on_top
 
 

@@ -282,35 +282,60 @@
   }
   .control-panel.collapsed .panel-body { display: none; }
   .panel-body {
-    padding: 6px 14px 10px;
-  }
-  .btn-group {
+    padding: 8px 14px 12px;
     display: flex;
-    gap: 5px;
-    margin-bottom: 8px;
+    flex-direction: column;
+    gap: 10px;
   }
-  .btn-group button {
-    flex: 1;
-    padding: 5px 0;
-    background: rgba(34,211,238,0.06);
-    border: 1px solid rgba(34,211,238,0.15);
-    border-radius: 6px;
-    color: rgba(34,211,238,0.5);
+  .setting-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  .setting-label {
     font-size: 10px;
-    font-family: 'JetBrains Mono', 'Courier New', monospace;
+    color: #94a3b8;
+    letter-spacing: 0.5px;
+  }
+  /* Toggle switch */
+  .toggle-switch {
+    position: relative;
+    width: 32px;
+    height: 16px;
+    flex-shrink: 0;
+  }
+  .toggle-switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+  }
+  .toggle-slider {
+    position: absolute;
+    inset: 0;
+    background: rgba(255,255,255,0.1);
+    border-radius: 8px;
     cursor: pointer;
-    transition: all 0.25s ease;
-    letter-spacing: 0;
+    transition: background 0.25s;
   }
-  .btn-group button:hover {
-    background: rgba(34,211,238,0.12);
-    color: rgba(34,211,238,0.85);
+  .toggle-slider::after {
+    content: '';
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 12px;
+    height: 12px;
+    background: #64748b;
+    border-radius: 50%;
+    transition: all 0.25s;
   }
-  .btn-group button.active {
-    background: rgba(34,211,238,0.15);
-    border-color: #22d3ee;
-    color: #22d3ee;
-    box-shadow: 0 0 8px rgba(34,211,238,0.2), inset 0 0 6px rgba(34,211,238,0.08);
+  .toggle-switch input:checked + .toggle-slider {
+    background: rgba(34,211,238,0.25);
+  }
+  .toggle-switch input:checked + .toggle-slider::after {
+    transform: translateX(16px);
+    background: #22d3ee;
+    box-shadow: 0 0 6px rgba(34,211,238,0.5);
   }
   .slider-row {
     display: flex;
@@ -378,23 +403,24 @@
     </div>
   </div>
 
-  <!-- 底部控制面板 -->
+  <!-- 底部设置面板 -->
   <div class="control-panel collapsed" id="control-panel">
     <button class="panel-toggle" id="panel-toggle">
-      <span>STATUS PANEL</span>
+      <span>SETTINGS</span>
       <span class="arrow">▼</span>
     </button>
     <div class="panel-body">
-      <div class="btn-group">
-        <button class="active" data-state="idle">待機</button>
-        <button data-state="thinking">思考</button>
-        <button data-state="working">工作</button>
-        <button data-state="done">完了</button>
+      <div class="setting-row">
+        <span class="setting-label">开机自启</span>
+        <label class="toggle-switch">
+          <input type="checkbox" id="autostart">
+          <span class="toggle-slider"></span>
+        </label>
       </div>
-      <div class="slider-row">
-        <span>強度</span>
-        <input type="range" id="intensity" min="1" max="10" value="5">
-        <span id="intensity-val">5</span>
+      <div class="setting-row">
+        <span class="setting-label">透明度</span>
+        <input type="range" id="opacity-slider" min="20" max="100" value="90">
+        <span class="setting-label" id="opacity-val">90%</span>
       </div>
     </div>
   </div>
@@ -536,10 +562,28 @@
     fitWindow();
   });
 
-  var intensitySlider = document.getElementById('intensity');
-  var intensityVal = document.getElementById('intensity-val');
-  intensitySlider.addEventListener('input', function() {
-    intensityVal.textContent = this.value;
+  /* Prevent drag when interacting with panel controls */
+  controlPanel.addEventListener('mousedown', function(e) {
+    e.stopPropagation();
+  });
+
+  /* ====== Auto-start toggle ====== */
+  var autostartEl = document.getElementById('autostart');
+  autostartEl.addEventListener('change', function() {
+    if (window.pywebview && pywebview.api) {
+      pywebview.api.set_autostart(this.checked);
+    }
+  });
+
+  /* ====== Opacity slider ====== */
+  var opacitySlider = document.getElementById('opacity-slider');
+  var opacityVal = document.getElementById('opacity-val');
+  opacitySlider.addEventListener('input', function() {
+    var v = parseInt(this.value);
+    opacityVal.textContent = v + '%';
+    if (window.pywebview && pywebview.api) {
+      pywebview.api.set_opacity(v);
+    }
   });
 
   /* ====== Initial fit ====== */
