@@ -275,14 +275,15 @@ def main():
         'ClaudeWatch',
         html_path,
         width=320,
-        height=300,
+        height=100,
         x=50,
         y=50,
         frameless=True,
         transparent=True,
+        background_color='#000000',
         on_top=True,
         js_api=api,
-        min_size=(280, 200),
+        min_size=(280, 80),
     )
     window._on_top = True
 

@@ -20,7 +20,7 @@
   /* ====== 卡片容器（圆角+毛玻璃） ====== */
   .widget {
     width: 320px;
-    margin: 8px;
+    margin: 0;
     background: rgba(10, 12, 16, 0.90);
     backdrop-filter: blur(40px);
     -webkit-backdrop-filter: blur(40px);
@@ -354,8 +354,8 @@
     requestAnimationFrame(function() {
       var rect = widget.getBoundingClientRect();
       // 8px margin on each side, +2 for rounding safety
-      var w = Math.ceil(rect.width) + 18;
-      var h = Math.ceil(rect.height) + 18;
+      var w = Math.ceil(rect.width);
+      var h = Math.ceil(rect.height);
       if (window.pywebview && pywebview.api) {
         pywebview.api.resize(w, h);
       }
