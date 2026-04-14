@@ -11,13 +11,14 @@ A lightweight floating desktop widget that monitors your [Claude Code](https://c
 - **Live Session Monitoring** - Automatically detects active Claude Code CLI sessions and displays their status (idle, thinking, working)
 - **Always on Top** - Floats above all windows as a compact overlay
 - **Draggable** - Grab the grip bar to reposition anywhere on screen
-- **Pin/Unpin** - Toggle always-on-top behavior
 - **Opacity Control** - Adjust window transparency from 20% to 100% via a slider
 - **Auto-start on Boot** - Optional startup with Windows via registry entry
 - **Rounded Corners** - Native Win32 region clipping for smooth rounded edges
 - **Dark Theme** - Cyberpunk-inspired UI with JetBrains Mono font and glow effects
 
 ## Preview
+
+![ClaudeWatch Screenshot](ScreenShot_2026-04-14_104015_468.png)
 
 The widget displays each Claude Code session as a card with:
 
