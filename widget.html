@@ -249,6 +249,98 @@
   .empty-state svg { color: #475569; opacity: 0.3; }
   .empty-state span { font-size: 11px; color: #475569; letter-spacing: 1px; }
   .empty-state .sub { font-size: 9px; color: #334155; }
+
+  /* ====== 底部控制面板 ====== */
+  .control-panel {
+    border-top: 1px solid rgba(255,255,255,0.05);
+    background: rgba(255,255,255,0.01);
+  }
+  .panel-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 24px;
+    background: transparent;
+    border: none;
+    color: rgba(34,211,238,0.5);
+    font-size: 10px;
+    font-family: 'JetBrains Mono', 'Courier New', monospace;
+    cursor: pointer;
+    letter-spacing: 1px;
+    transition: color 0.3s ease;
+  }
+  .panel-toggle:hover { color: #22d3ee; }
+  .panel-toggle .arrow {
+    display: inline-block;
+    transition: transform 0.3s ease;
+    margin-left: 6px;
+    font-size: 9px;
+  }
+  .control-panel.collapsed .panel-toggle .arrow {
+    transform: rotate(180deg);
+  }
+  .control-panel.collapsed .panel-body { display: none; }
+  .panel-body {
+    padding: 6px 14px 10px;
+  }
+  .btn-group {
+    display: flex;
+    gap: 5px;
+    margin-bottom: 8px;
+  }
+  .btn-group button {
+    flex: 1;
+    padding: 5px 0;
+    background: rgba(34,211,238,0.06);
+    border: 1px solid rgba(34,211,238,0.15);
+    border-radius: 6px;
+    color: rgba(34,211,238,0.5);
+    font-size: 10px;
+    font-family: 'JetBrains Mono', 'Courier New', monospace;
+    cursor: pointer;
+    transition: all 0.25s ease;
+    letter-spacing: 0;
+  }
+  .btn-group button:hover {
+    background: rgba(34,211,238,0.12);
+    color: rgba(34,211,238,0.85);
+  }
+  .btn-group button.active {
+    background: rgba(34,211,238,0.15);
+    border-color: #22d3ee;
+    color: #22d3ee;
+    box-shadow: 0 0 8px rgba(34,211,238,0.2), inset 0 0 6px rgba(34,211,238,0.08);
+  }
+  .slider-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .slider-row span {
+    color: rgba(34,211,238,0.45);
+    font-size: 9px;
+    white-space: nowrap;
+    letter-spacing: 1px;
+  }
+  input[type="range"] {
+    flex: 1;
+    -webkit-appearance: none;
+    appearance: none;
+    height: 3px;
+    background: rgba(34,211,238,0.12);
+    border-radius: 2px;
+    outline: none;
+  }
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #22d3ee;
+    box-shadow: 0 0 6px rgba(34,211,238,0.5);
+    cursor: pointer;
+  }
 </style>
 </head>
 <body>
@@ -285,8 +377,28 @@
       <span class="sub">Waiting for sessions</span>
     </div>
   </div>
-</div>
 
+  <!-- 底部控制面板 -->
+  <div class="control-panel collapsed" id="control-panel">
+    <button class="panel-toggle" id="panel-toggle">
+      <span>STATUS PANEL</span>
+      <span class="arrow">▼</span>
+    </button>
+    <div class="panel-body">
+      <div class="btn-group">
+        <button class="active" data-state="idle">待機</button>
+        <button data-state="thinking">思考</button>
+        <button data-state="working">工作</button>
+        <button data-state="done">完了</button>
+      </div>
+      <div class="slider-row">
+        <span>強度</span>
+        <input type="range" id="intensity" min="1" max="10" value="5">
+        <span id="intensity-val">5</span>
+      </div>
+    </div>
+  </div>
+</div>
 <script>
 (function() {
   'use strict';
@@ -416,6 +528,22 @@
     this.classList.toggle('unpinned');
     if (window.pywebview && pywebview.api) pywebview.api.toggle_pin();
   });
+
+  /* ====== Panel Toggle ====== */
+  var controlPanel = document.getElementById('control-panel');
+  document.getElementById('panel-toggle').addEventListener('click', function() {
+    controlPanel.classList.toggle('collapsed');
+    fitWindow();
+  });
+
+  var intensitySlider = document.getElementById('intensity');
+  var intensityVal = document.getElementById('intensity-val');
+  intensitySlider.addEventListener('input', function() {
+    intensityVal.textContent = this.value;
+  });
+
+  /* ====== Initial fit ====== */
+  fitWindow();
 
 })();
 </script>
