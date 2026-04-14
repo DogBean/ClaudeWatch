@@ -115,11 +115,6 @@
     transition: all 0.2s;
     padding: 0;
   }
-  .btn-pin {
-    background: rgba(52,211,153,0.6);
-  }
-  .btn-pin:hover { background: rgba(52,211,153,0.9); }
-  .btn-pin.unpinned { background: rgba(100,116,139,0.4); }
   .btn-close {
     background: rgba(239,68,68,0.5);
   }
@@ -388,8 +383,7 @@
       <span class="title-text">WATCH<span class="session-count" id="session-count"></span></span>
     </div>
     <div class="title-actions">
-      <button class="action-btn btn-pin" id="btn-pin" title="置顶"></button>
-      <button class="action-btn btn-close" id="btn-close" title="关闭"></button>
+      <button class="action-btn btn-close" id="btn-close" title="Close"></button>
     </div>
   </div>
 
@@ -549,10 +543,6 @@
   /* ====== Controls ====== */
   document.getElementById('btn-close').addEventListener('click', function() {
     if (window.pywebview && pywebview.api) pywebview.api.close_window();
-  });
-  document.getElementById('btn-pin').addEventListener('click', function() {
-    this.classList.toggle('unpinned');
-    if (window.pywebview && pywebview.api) pywebview.api.toggle_pin();
   });
 
   /* ====== Panel Toggle ====== */
